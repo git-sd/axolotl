@@ -1,0 +1,46 @@
+// The Axolotl logo mark: a front-facing axolotl head with gills, drawn in the same
+// thick-outline cartoon style as the TinyFish logo so the two sit well side by side.
+// app/icon.svg is the same drawing, used as the browser-tab icon.
+const AXOLOTL_MARK_PATHS = (
+  <>
+    <g stroke="#1b0a10" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round">
+      {/* gills: three a side */}
+      <path d="M52 92 L18 62 M48 120 L10 112 M54 146 L20 166" />
+      <path d="M204 92 L238 62 M208 120 L246 112 M202 146 L236 166" />
+    </g>
+    <g stroke="#e2557a" strokeWidth="5" strokeLinecap="round">
+      <path d="M52 92 L18 62 M48 120 L10 112 M54 146 L20 166" />
+      <path d="M204 92 L238 62 M208 120 L246 112 M202 146 L236 166" />
+    </g>
+    {/* gill frills */}
+    <g fill="#e2557a" stroke="#1b0a10" strokeWidth="5">
+      <circle cx="18" cy="62" r="12" />
+      <circle cx="10" cy="112" r="12" />
+      <circle cx="20" cy="166" r="12" />
+      <circle cx="238" cy="62" r="12" />
+      <circle cx="246" cy="112" r="12" />
+      <circle cx="236" cy="166" r="12" />
+    </g>
+    {/* head */}
+    <ellipse cx="128" cy="128" rx="86" ry="72" fill="#f9cdd2" stroke="#1b0a10" strokeWidth="9" />
+    <ellipse cx="128" cy="152" rx="56" ry="32" fill="#fde4e6" />
+    {/* cheeks */}
+    <ellipse cx="78" cy="148" rx="13" ry="9" fill="#ee7f95" />
+    <ellipse cx="178" cy="148" rx="13" ry="9" fill="#ee7f95" />
+    {/* eyes */}
+    <circle cx="96" cy="122" r="13" fill="#1b0a10" />
+    <circle cx="160" cy="122" r="13" fill="#1b0a10" />
+    <circle cx="92" cy="117" r="4.5" fill="#fff" />
+    <circle cx="156" cy="117" r="4.5" fill="#fff" />
+    {/* smile */}
+    <path d="M106 150 Q128 168 150 150" fill="none" stroke="#1b0a10" strokeWidth="7" strokeLinecap="round" />
+  </>
+);
+
+export default function AxolotlMark({ size }: { size: number }) {
+  return (
+    <svg viewBox="0 0 256 256" width={size} height={size} role="img" aria-label="Axolotl" style={{ display: "block", overflow: "visible" }}>
+      {AXOLOTL_MARK_PATHS}
+    </svg>
+  );
+}
