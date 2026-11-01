@@ -164,12 +164,12 @@ export default function Scanner() {
               {[...PRESETS, "own"].map((k) => {
                 const on = sel === k;
                 return (
-                  <button key={k} className="type" onClick={() => setSel(on ? null : k)} aria-pressed={on} data-own={k === "own"}>
+                  <button key={k} className="type" onClick={() => setSel(on ? null : k)} aria-pressed={on} disabled={k === "own"} data-own={k === "own"}>
                     <span className="type-art">
                       <TypeArt kind={k} />
                     </span>
                     <b>{k === "own" ? "Describe it yourself" : SITES[k].name}</b>
-                    <small>{k === "own" ? "Something else? Tell us." : SITES[k].sub}</small>
+                    <small>{k === "own" ? "Coming soon" : SITES[k].sub}</small>
                   </button>
                 );
               })}
