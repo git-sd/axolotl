@@ -5,24 +5,13 @@ import { useSearchParams } from "next/navigation";
 import TinyfishLogo from "@/components/tinyfish-logo";
 import AxolotlMark from "@/components/axolotl-mark";
 import TypeArt from "@/components/type-art";
-import { DIMS, PRESETS, SITES, detect, verdictOf } from "@/lib/sites";
+import Report from "@/components/report";
+import { PRESETS, SITES, detect, verdictOf } from "@/lib/sites";
 import { tasksFor, type ScanResult } from "@/lib/scan";
 import type { ScanEvent } from "@/app/api/scan/route";
 
 type Phase = "pick" | "address" | "loading" | "results";
-type TaskState = "run" | "pass" | "fail";
-
-const round = (n: number) => Math.round(n * 10) / 10;
-
-// "7.3 / 25" for a row's marks; nothing for items that carry no marks.
-function Marks({ earned, max }: { earned?: number; max?: number }) {
-  if (earned === undefined || !max) return null;
-  return (
-    <span className="marks" data-full={earned >= max - 0.05} title="Marks earned out of marks available, from a total of 100">
-      <b>{earned}</b> / {max}
-    </span>
-  );
-}
+type TaskState = "queued" | "run" | "pass" | "fail";
 
 function hostOf(u: string) {
   try {
@@ -62,7 +51,7 @@ export default function Scanner() {
     window.scrollTo(0, 0);
   }, [phase]);
 
-  // Runs the three TinyFish agents through /api/scan and follows their progress live.
+  // Runs the TinyFish agents and site checks through /api/scan and follows their progress live.
   async function scan(h: string) {
     if (running.current) return;
     running.current = true;
@@ -71,10 +60,10 @@ export default function Scanner() {
     const tasks = tasksFor(key);
     setFromCache(false);
     setTitles(tasks.map((t) => t.title));
-    setStates(tasks.map(() => "run"));
+    setStates(tasks.map(() => "queued"));
     setSteps(tasks.map(() => ""));
     setChecks(null);
-    setStatus(`Sending 3 agents to ${h}…`);
+    setStatus(`Sending 6 agents to ${h}…`);
     try {
       const res = await fetch("/api/scan", {
         method: "POST",
@@ -104,6 +93,8 @@ export default function Scanner() {
             setStatus(e.text);
           } else if (e.type === "checks") {
             setChecks(e.checks);
+          } else if (e.type === "started") {
+            setStates((s) => s.map((v, j) => (j === e.task && v === "queued" ? "run" : v)));
           } else if (e.type === "task") {
             setStates((s) => s.map((v, j) => (j === e.task ? (e.ok ? "pass" : "fail") : v)));
           } else if (e.type === "result") {
@@ -239,7 +230,7 @@ export default function Scanner() {
               </button>
             </div>
             <p className="fineprint">
-              Three TinyFish agents will try real tasks on this site. A scan takes a minute or two. They never submit, pay, book or sign up.
+              Six TinyFish agents will each try a real task on this site, and 26 checks will read its files. A scan takes about three to five minutes. The agents never submit, pay, book or sign up.
             </p>
           </div>
         )}
@@ -260,6 +251,7 @@ export default function Scanner() {
                     </span>
                     <span className="check-text">
                       {title}
+                      {st === "queued" && <small>Waiting for its turn</small>}
                       {st === "run" && steps[i] && <small>{steps[i]}</small>}
                     </span>
                   </div>
@@ -272,7 +264,7 @@ export default function Scanner() {
                 <span className="check-text">
                   Site checks
                   <small>
-                    {checks ? `${checks.filter((c) => c.ok).length} of ${checks.length} passed` : "robots.txt, structured data, forms, content without JavaScript"}
+                    {checks ? `${checks.filter((c) => c.ok).length} of ${checks.length} passed` : "26 checks: robots.txt, structured data, forms, links, content without JavaScript"}
                   </small>
                 </span>
               </div>
@@ -309,105 +301,7 @@ export default function Scanner() {
               </span>
             </div>
 
-            <div className="result-grid">
-              <section className="card">
-                <div className="card-label">
-                  Agent tasks
-                  {result.tasks[0]?.[4] !== undefined && (
-                    <span className="card-total">
-                      {round(result.tasks.reduce((a, t) => a + (t[3] ?? 0), 0))} / {round(result.tasks.reduce((a, t) => a + (t[4] ?? 0), 0))} marks
-                    </span>
-                  )}
-                </div>
-                {result.tasks.map((t) => (
-                  <div key={t[0]} className="task-row">
-                    <span className="dot" data-dot={t[2] ? "pass" : "fail"}>
-                      {t[2] ? "✓" : "✕"}
-                    </span>
-                    <div>
-                      <div className="t">{t[0]}</div>
-                      <div className="d">{t[1]}</div>
-                    </div>
-                    <Marks earned={t[3]} max={t[4]} />
-                  </div>
-                ))}
-              </section>
-              <section className="card">
-                <div className="card-label">Score breakdown</div>
-                {DIMS.map((d, i) => (
-                  <div className="dim" key={d}>
-                    <div className="dim-head">
-                      <span>
-                        {d}
-                        {result.weights && <small className="dim-weight">{Math.round(result.weights[i] * 100)}% of score</small>}
-                      </span>
-                      <span>{result.dims[i]}</span>
-                    </div>
-                    <div className="bar">
-                      <div style={{ width: `${result.dims[i]}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </section>
-            </div>
-
-            {!!result.checks?.length && (
-              <section className="card site-checks">
-                <div className="card-label">
-                  Site checks · {result.checks.filter((c) => c.ok).length} of {result.checks.length} passed
-                  {result.checks.some((c) => c.max) && (
-                    <span className="card-total">
-                      {round(result.checks.reduce((a, c) => a + (c.marks ?? 0), 0))} / {round(result.checks.reduce((a, c) => a + (c.max ?? 0), 0))} marks
-                    </span>
-                  )}
-                </div>
-                <div className="site-checks-grid">
-                  {result.checks.map((c) => (
-                    <div key={c.label} className="task-row">
-                      <span className="dot" data-dot={c.ok ? "pass" : "fail"}>
-                        {c.ok ? "✓" : "✕"}
-                      </span>
-                      <div>
-                        <div className="t">{c.label}</div>
-                        <div className="d">{c.detail}</div>
-                      </div>
-                      <Marks earned={c.marks} max={c.max} />
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            <section className="card">
-              <div className="card-label">Ranked fixes</div>
-              {result.fixes.length === 0 && <p className="verdict-sub">No problems found.</p>}
-              {result.fixes.map((f) => (
-                <div key={f[1]} className="fix">
-                  <span className="pri" data-priority={f[0]}>
-                    {f[0].toUpperCase()}
-                  </span>
-                  <div>
-                    <b>
-                      {f[1]}
-                      {f[4] && <span className="verified">verified</span>}
-                    </b>
-                    <span className="why">{f[2]}</span>
-                    {f[3] > 0 && <em>+{f[3]} pts</em>}
-                  </div>
-                </div>
-              ))}
-            </section>
-
-            <div className="result-foot">
-              <button className="btn" onClick={reset}>
-                Scan another site
-              </button>
-              <p className="fineprint">
-                {fromCache
-                  ? "This site was scanned in the last hour, so these are those results. Fix points are estimates."
-                  : "Live results from three TinyFish agents. Fix points are estimates."}
-              </p>
-            </div>
+            <Report result={result} host={host} fromCache={fromCache} onReset={reset} />
           </div>
         )}
       </main>

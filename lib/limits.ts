@@ -14,7 +14,7 @@ const num = (v: string | undefined, fallback: number) => {
 // All overridable from .env.local.
 export const LIMITS = {
   perIpPerHour: num(process.env.SCAN_LIMIT_PER_HOUR, 3),
-  dailyBudget: num(process.env.SCAN_DAILY_BUDGET, 40),
+  dailyBudget: num(process.env.SCAN_DAILY_BUDGET, 20),
   maxConcurrent: num(process.env.SCAN_MAX_CONCURRENT, 3),
   cacheMinutes: num(process.env.SCAN_CACHE_MINUTES, 60),
 };

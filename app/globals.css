@@ -613,3 +613,207 @@ textarea.field {
 .result-foot .fineprint {
   margin-top: 28px;
 }
+
+/* ---------- scan report ---------- */
+
+.card.summary p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.card.summary .stats {
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* One expandable row: an agent task or a site check. Native <details>, so no animation. */
+.item {
+  border-top: 1px solid var(--line);
+}
+
+.item:first-of-type {
+  border-top: 0;
+}
+
+.item > summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.item > summary:hover .t {
+  color: var(--coral);
+}
+
+.item > summary::after {
+  content: "+";
+  flex: none;
+  width: 18px;
+  margin-left: 6px;
+  font-weight: 900;
+  text-align: center;
+  color: var(--muted);
+}
+
+.item[open] > summary::after {
+  content: "–";
+}
+
+.item-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.item-main .t {
+  font-weight: 700;
+}
+
+.item-main .d {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.item > summary .marks {
+  margin-left: auto;
+}
+
+.item-body {
+  margin: 0 0 16px 34px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(246, 220, 216, 0.05);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.field-row + .field-row {
+  margin-top: 14px;
+}
+
+.field-row > b {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field-row p {
+  margin: 0;
+}
+
+.pages,
+.log ol {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.mini-fix {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.mini-fix b {
+  display: block;
+  font-weight: 700;
+}
+
+.mini-fix .where,
+.fix .source {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.mini-fix .why,
+.fix .why {
+  display: block;
+}
+
+.log {
+  margin-top: 14px;
+}
+
+.log > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--coral);
+}
+
+.log ol {
+  margin-top: 8px;
+}
+
+.check-group + .check-group {
+  margin-top: 22px;
+}
+
+.check-group h3 {
+  margin: 0 0 4px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--line);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.check-group h3 small {
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.dim-note {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--coral);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--coral);
+  color: var(--ink);
+}
+
+.result-foot .actions {
+  margin-top: 0;
+}
+
+/* A task that has not started yet, and one with no verdict (left out of the score). */
+.dot[data-dot="queued"] {
+  border-style: dashed;
+  border-color: var(--muted);
+}
+
+.dot[data-dot="skip"] {
+  border-color: var(--muted);
+  background: transparent;
+  color: var(--muted);
+}
+
+.check[data-state="queued"] {
+  color: var(--muted);
+}
