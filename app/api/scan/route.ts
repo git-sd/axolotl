@@ -60,11 +60,11 @@ function normaliseUrl(raw: unknown): string | null {
 
 // The SDK cannot cancel a run, so stop it through the API. Without this an agent we gave up
 // on would carry on working (and billing) in the background.
-async function cancelRun(runId: string) {
+async function cancelRun(runId: string, apiKey: string) {
   try {
     await fetch(`https://agent.tinyfish.ai/v1/runs/${encodeURIComponent(runId)}/cancel`, {
       method: "POST",
-      headers: { "X-API-Key": process.env.TINYFISH_API_KEY ?? "", "Content-Type": "application/json" },
+      headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
       body: "{}",
       signal: AbortSignal.timeout(8000),
     });
@@ -89,8 +89,12 @@ async function pool<T, R>(items: T[], limit: number, fn: (item: T, index: number
 }
 
 export async function POST(req: Request) {
-  if (!process.env.TINYFISH_API_KEY) {
-    return Response.json({ error: "No TinyFish API key is set. Add TINYFISH_API_KEY and restart." }, { status: 503 });
+  // Callers such as the MCP server can bring their own TinyFish key; their scan then runs on
+  // their account, so it does not touch this site's scan budget.
+  const ownKey = req.headers.get("x-tinyfish-key")?.trim() || "";
+  const apiKey = ownKey || process.env.TINYFISH_API_KEY || "";
+  if (!apiKey) {
+    return Response.json({ error: "No TinyFish API key is set. Add TINYFISH_API_KEY and restart, or send your own in the X-TinyFish-Key header." }, { status: 503 });
   }
 
   const body = (await req.json().catch(() => ({}))) as { url?: unknown; type?: unknown; description?: unknown };
@@ -119,10 +123,10 @@ export async function POST(req: Request) {
     return new Response(replay, { headers: STREAM_HEADERS });
   }
 
-  const slot = reserve(clientIp(req));
+  const slot = ownKey ? { ok: true as const, release: () => {} } : reserve(clientIp(req));
   if (!slot.ok) return Response.json({ error: slot.message }, { status: 429 });
 
-  const client = new TinyFish();
+  const client = new TinyFish({ apiKey });
   const startedAt = Date.now();
 
   const stream = new ReadableStream({
@@ -208,7 +212,7 @@ export async function POST(req: Request) {
           clearTimeout(timer);
           req.signal.removeEventListener("abort", onClientGone);
         }
-        if ((outcome.timedOut || req.signal.aborted) && runId) await cancelRun(runId);
+        if ((outcome.timedOut || req.signal.aborted) && runId) await cancelRun(runId, apiKey);
         // A run that finished with a report before the timer fired has a verdict after all.
         if (outcome.report) {
           outcome.timedOut = false;
@@ -255,7 +259,7 @@ export async function POST(req: Request) {
         } else {
           const result = scoreOutcomes(type, outcomes, checks);
           result.stats = { ...(result.stats ?? { agents: outcomes.length, steps: 0 }), seconds: Math.round((Date.now() - startedAt) / 1000) };
-          remember(url, type, description, result);
+          if (!ownKey) remember(url, type, description, result);
           send({ type: "result", result });
         }
       } catch (err) {

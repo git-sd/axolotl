@@ -61,3 +61,7 @@ The limits are kept in server memory. On hosts that run several instances (such 
 - `lib/limits.ts`: rate limits, daily budget, result cache and same-origin check
 - `lib/schedule.ts`: how many tasks fit the time, and how long each agent gets
 - `lib/sites.ts`: site types and how much each dimension counts for them
+
+## Use it from an AI agent (MCP)
+
+`mcp/` is an MCP server that lets Claude Code, Cursor and other agents check a site: `axolotl_check` is free and takes seconds, `axolotl_scan` runs the full TinyFish scan. See [`mcp/README.md`](mcp/README.md) for setup. The free check is also available as `POST /api/check` with `{ "url": "...", "type": "shop" }`.

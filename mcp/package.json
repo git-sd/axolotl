@@ -1,0 +1,13 @@
+{
+  "name": "axolotl-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Axolotl: check how ready a website is for AI agents.",
+  "type": "module",
+  "bin": { "axolotl-mcp": "server.mjs" },
+  "main": "server.mjs",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.25.0"
+  }
+}
