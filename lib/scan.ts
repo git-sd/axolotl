@@ -160,7 +160,7 @@ const TASKS: Record<string, ScanTask[]> = {
     {
       title: "Read across pages",
       detail: "Follow next and previous links",
-      goal: "Starting on a guide or article page, follow its next-page or related links through three pages in a row, and report whether the path made sense.",
+      goal: "Starting on a guide or article page, follow its next-page or related link to a second page, and then to a third, and report whether the path made sense. If a link takes you somewhere unrelated, say so.",
       weight: 25,
     },
   ],
@@ -326,6 +326,7 @@ export type TaskOutcome = {
   // No verdict because of time or infrastructure (not because the agent failed on the site).
   // Such a task says nothing about the site, so it is left out of the score and flagged.
   inconclusive?: boolean;
+  notRun?: boolean; // never started: the scan's time only pays for some of the tasks
 };
 
 export function tasksFor(type: string): ScanTask[] {
@@ -374,6 +375,7 @@ export type TaskDetail = {
   status: string;
   timedOut: boolean;
   unscored?: boolean; // no verdict, so left out of the score
+  notRun?: boolean; // never started because it did not fit in the scan's time
   steps: number;
   evidence: string;
   pages: string[];
@@ -396,7 +398,7 @@ export type ScanResult = {
   fixes: [Priority, string, string, number, boolean?, string?][];
   score: number;
   checks?: { label: string; ok: boolean; detail: string; marks?: number; max?: number; why?: string; fix?: string; dim?: string }[];
-  stats?: { agents: number; steps: number; seconds?: number; timedOut?: number; unscored?: number };
+  stats?: { agents: number; steps: number; seconds?: number; timedOut?: number; unscored?: number; notRun?: number };
 };
 
 const STOP = new Set("the a an and or of to for on in is are be with no not this that it its site page there can".split(" "));
@@ -513,7 +515,7 @@ export function scoreOutcomes(type: string, outcomes: TaskOutcome[], checks: Che
     `Agents found the starting point in ${count((o) => !!o.report?.found_entry_point)} of ${n} tasks.`,
     `Agents reached the final step in ${count((o) => !!o.report?.reached_final_step)} of ${n} tasks.`,
     `Agents could complete ${count((o) => !!o.report?.task_achievable)} of ${n} tasks.`,
-    `${count((o) => o.status === "COMPLETED" && !["captcha_or_bot_check", "page_error"].includes(o.report?.blocked_by ?? ""))} of ${n} agent runs finished cleanly${skipped ? ` (${skipped} more could not be scored: no verdict in time)` : ""}.`,
+    `${count((o) => o.status === "COMPLETED" && !["captcha_or_bot_check", "page_error"].includes(o.report?.blocked_by ?? ""))} of ${n} agent runs finished cleanly${skipped ? ` (${skipped} more left out: not run or no verdict in time)` : ""}.`,
   ];
   const dimNotes = [0, 1, 2, 3].map((d) => {
     const mine = checks.filter((c) => c.dim === d && c.weight > 0);
@@ -571,7 +573,14 @@ export function scoreOutcomes(type: string, outcomes: TaskOutcome[], checks: Che
     type,
     tasks: outcomes.map((o, i) => [
       o.title,
-      clip(o.report?.summary || (unscored[i] ? `Not scored: ${o.timedOut ? "the agent did not finish in the time allowed" : "the agent could not run"}. Run the scan again to retry it.` : o.error) || o.detail),
+      clip(
+        o.report?.summary ||
+          (o.notRun
+            ? "Not run: this server's time limit only fits some of the tasks in one scan. Run the scan on a host with longer limits to include it."
+            : unscored[i]
+              ? `Not scored: ${o.timedOut ? "the agent did not finish in the time allowed" : "the agent could not run"}. Run the scan again to retry it.`
+              : o.error) || o.detail,
+      ),
       o.report?.task_achievable ? 1 : 0,
       round1(taskMarks[i].earned),
       round1(taskMarks[i].max),
@@ -579,6 +588,7 @@ export function scoreOutcomes(type: string, outcomes: TaskOutcome[], checks: Che
     taskDetails: outcomes.map((o, i) => ({
       status: o.status,
       timedOut: !!o.timedOut,
+      notRun: !!o.notRun,
       unscored: unscored[i],
       steps: o.steps,
       evidence: o.report?.evidence ?? "",
@@ -603,10 +613,11 @@ export function scoreOutcomes(type: string, outcomes: TaskOutcome[], checks: Che
       dim: DIM_NAMES[c.dim],
     })),
     stats: {
-      agents: n,
+      agents: outcomes.filter((o) => !o.notRun).length,
       steps: outcomes.reduce((a, o) => a + o.steps, 0),
       timedOut: outcomes.filter((o) => !!o.timedOut).length,
       unscored: skipped,
+      notRun: outcomes.filter((o) => !!o.notRun).length,
     },
   };
 }

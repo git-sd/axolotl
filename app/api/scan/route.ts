@@ -2,6 +2,7 @@ import { TinyFish } from "@tiny-fish/sdk";
 import { goalFor, parseReport, REPORT_SCHEMA, scoreOutcomes, tasksFor, type ScanResult, type TaskOutcome } from "@/lib/scan";
 import { cached, clientIp, remember, reserve, sameOrigin } from "@/lib/limits";
 import { runChecks, type Check } from "@/lib/checks";
+import { chooseTasks, tasksThatFit, timeAllowed } from "@/lib/schedule";
 
 // Hosts cap how long a request may run (Vercel's free plan: 300 seconds). The scan has to
 // finish, and send its result, inside this, so the time budgets below are worked out from it.
@@ -11,18 +12,22 @@ const num = (v: string | undefined, fallback: number) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
-// How many agents work at once. All six at once gives each the most time inside the host's
-// limit; lower it if your TinyFish plan caps concurrent runs (excess tasks then wait their turn).
-const CONCURRENCY = num(process.env.SCAN_AGENT_CONCURRENCY, 6);
-// The longest any one agent may work before it is stopped. A stopped agent has no verdict, so
-// its task is left out of the score rather than counted against the site.
+// How many agents TinyFish lets run at once. The standard plan allows 2 per run; raise this only
+// if your plan allows more.
+const CONCURRENCY = num(process.env.SCAN_AGENT_CONCURRENCY, 2);
+// The longest any one agent may work. A stopped agent has no verdict, so its task is left out of
+// the score rather than counted against the site.
 const TASK_MS = num(process.env.SCAN_AGENT_SECONDS, 230) * 1000;
 // The whole scan must be wrapped up by here, leaving room to score and send the result.
 const BUDGET_MS = num(process.env.SCAN_TOTAL_SECONDS, 270) * 1000;
+// The least time worth giving an agent. Concurrency x budget fixes how much agent time a scan
+// has, and this decides how many tasks that pays for (the most important ones run first).
+const MIN_AGENT_MS = num(process.env.SCAN_MIN_AGENT_SECONDS, 110) * 1000;
 // An agent that would get less than this is not started: it could not do anything useful.
 const MIN_TASK_MS = 25_000;
 
 // Stream events, one JSON object per line:
+//   { type: "skipped", task }               a task that does not fit in this scan's time, not run
 //   { type: "started", task }               an agent began working (it may have been waiting)
 //   { type: "progress", task, text }        an agent did something
 //   { type: "task", task, ok }              an agent finished
@@ -30,6 +35,7 @@ const MIN_TASK_MS = 25_000;
 //   { type: "result", result, cached? }     final ScanResult (cached: replayed from a recent scan)
 //   { type: "error", message }
 export type ScanEvent =
+  | { type: "skipped"; task: number }
   | { type: "started"; task: number }
   | { type: "progress"; task: number; text: string }
   | { type: "task"; task: number; ok: boolean }
@@ -123,12 +129,22 @@ export async function POST(req: Request) {
     async start(controller) {
       const send = (e: ScanEvent) => controller.enqueue(line(e));
 
+      // Tasks still to start, counting the one about to: used to share out the time left.
+      let toStart = 0;
+
       const runTask = async (task: (typeof tasks)[number], i: number): Promise<TaskOutcome> => {
         const outcome: TaskOutcome = { title: task.title, detail: task.detail, weight: task.weight, status: "FAILED", report: null, steps: 0, log: [] };
 
-        // How long this agent may work: its own cap, or whatever is left of the whole scan.
-        const left = BUDGET_MS - (Date.now() - startedAt);
-        const allowed = Math.min(TASK_MS, left);
+        // How long this agent may work: a fair share of the time left, up to its own cap. Agents
+        // that finish early leave their spare time to the ones still to start.
+        const allowed = timeAllowed({
+          remainingIncludingThis: toStart,
+          concurrency: CONCURRENCY,
+          budgetMs: BUDGET_MS,
+          elapsedMs: Date.now() - startedAt,
+          capMs: TASK_MS,
+        });
+        toStart--;
         if (allowed < MIN_TASK_MS) {
           outcome.timedOut = true;
           outcome.inconclusive = true;
@@ -192,7 +208,7 @@ export async function POST(req: Request) {
           clearTimeout(timer);
           req.signal.removeEventListener("abort", onClientGone);
         }
-        if (outcome.timedOut && runId) await cancelRun(runId);
+        if ((outcome.timedOut || req.signal.aborted) && runId) await cancelRun(runId);
         // A run that finished with a report before the timer fired has a verdict after all.
         if (outcome.report) {
           outcome.timedOut = false;
@@ -210,12 +226,30 @@ export async function POST(req: Request) {
             send({ type: "checks", checks: checks.map((c) => ({ label: c.label, ok: c.ok, detail: c.detail })) });
             return checks;
           });
-        // Start the tasks that matter most first. If TinyFish queues some runs, or time runs out,
-        // it is the lighter tasks at the back that go unscored, not the final goal.
-        const order = tasks.map((_, i) => i).sort((a, b) => tasks[b].weight - tasks[a].weight);
-        const [ranOrder, checks] = await Promise.all([pool(order, CONCURRENCY, (i) => runTask(tasks[i], i)), checksDone]);
+        // Run only as many tasks as the time pays for, the most important first. The rest are
+        // reported as not run, and their weight goes to the tasks that did run.
+        const fit = tasksThatFit(tasks.length, CONCURRENCY, BUDGET_MS, MIN_AGENT_MS);
+        const { run, skipped } = chooseTasks(tasks.map((t) => t.weight), fit);
+        toStart = run.length;
+        const notRun = (i: number): TaskOutcome => {
+          send({ type: "skipped", task: i });
+          return {
+            title: tasks[i].title,
+            detail: tasks[i].detail,
+            weight: tasks[i].weight,
+            status: "SKIPPED",
+            report: null,
+            steps: 0,
+            log: [],
+            inconclusive: true,
+            notRun: true,
+            error: "Not run: this server's time limit fits fewer tasks than this scan has.",
+          };
+        };
         const outcomes: TaskOutcome[] = new Array(tasks.length);
-        order.forEach((taskIndex, k) => (outcomes[taskIndex] = ranOrder[k]));
+        skipped.forEach((i) => (outcomes[i] = notRun(i)));
+        const [ranOrder, checks] = await Promise.all([pool(run, CONCURRENCY, (i) => runTask(tasks[i], i)), checksDone]);
+        run.forEach((taskIndex, k) => (outcomes[taskIndex] = ranOrder[k]));
         if (outcomes.every((o) => !o.report && o.error)) {
           send({ type: "error", message: outcomes[0].error ?? "Every agent run failed." });
         } else {

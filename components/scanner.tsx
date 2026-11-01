@@ -11,7 +11,7 @@ import { tasksFor, type ScanResult } from "@/lib/scan";
 import type { ScanEvent } from "@/app/api/scan/route";
 
 type Phase = "pick" | "address" | "loading" | "results";
-type TaskState = "queued" | "run" | "pass" | "fail";
+type TaskState = "queued" | "skip" | "run" | "pass" | "fail";
 
 function hostOf(u: string) {
   try {
@@ -63,7 +63,7 @@ export default function Scanner() {
     setStates(tasks.map(() => "queued"));
     setSteps(tasks.map(() => ""));
     setChecks(null);
-    setStatus(`Sending 6 agents to ${h}…`);
+    setStatus(`Sending agents to ${h}…`);
     try {
       const res = await fetch("/api/scan", {
         method: "POST",
@@ -93,6 +93,8 @@ export default function Scanner() {
             setStatus(e.text);
           } else if (e.type === "checks") {
             setChecks(e.checks);
+          } else if (e.type === "skipped") {
+            setStates((s) => s.map((v, j) => (j === e.task ? "skip" : v)));
           } else if (e.type === "started") {
             setStates((s) => s.map((v, j) => (j === e.task && v === "queued" ? "run" : v)));
           } else if (e.type === "task") {
@@ -230,7 +232,7 @@ export default function Scanner() {
               </button>
             </div>
             <p className="fineprint">
-              Six TinyFish agents will each try a real task on this site, and 26 checks will read its files. A scan takes about three to five minutes. The agents never submit, pay, book or sign up.
+              TinyFish agents will try real tasks on this site, two at a time, and 26 checks will read its files. A scan takes about three to four minutes. The agents never submit, pay, book or sign up.
             </p>
           </div>
         )}
@@ -252,6 +254,7 @@ export default function Scanner() {
                     <span className="check-text">
                       {title}
                       {st === "queued" && <small>Waiting for its turn</small>}
+                      {st === "skip" && <small>Not run: this server only has time for the main tasks</small>}
                       {st === "run" && steps[i] && <small>{steps[i]}</small>}
                     </span>
                   </div>
